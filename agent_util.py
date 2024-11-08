@@ -25,14 +25,14 @@ def create_gpt_agent():
         ]
     )
 
-    gpt = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+    gpt = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     gpt_agent = create_tool_calling_agent(gpt, tools, prompt)
 
     return gpt_agent
 
 
-def create_ollama_agent(model):
+def create_ollama_agent():
     tools = SEARCH_TOOLS
 
     prompt = ChatPromptTemplate.from_messages(
@@ -47,7 +47,7 @@ def create_ollama_agent(model):
         ]
     )
 
-    ollama = ChatOllama(model=model, temperature=0.2)
+    ollama = ChatOllama(model="llama3.1:8b-instruct-q8_0", temperature=0)
 
     ollama_agent = create_tool_calling_agent(ollama, tools, prompt)
 
@@ -55,11 +55,16 @@ def create_ollama_agent(model):
 
 
 def create_agent_with_chat_history(model):
+    if model == "***ChatGPT***":
+        agent = create_gpt_agent()
+    else:
+        agent = create_gpt_agent()
+        # agent = create_ollama_agent()
+
     agent_executor = AgentExecutor(
-        agent=create_gpt_agent(),
-        # agent=create_ollama_agent(model),
+        agent=agent,
         tools=SEARCH_TOOLS,
-        verbose=True,
+        verbose=False,
         handle_parsing_errors=True,
     )
 

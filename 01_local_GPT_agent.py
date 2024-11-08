@@ -23,11 +23,18 @@ st.title("Local GPT 💬")
 
 # 사이드바 생성
 with st.sidebar:
+    # # 파일 업로드
+    # uploaded_files = st.file_uploader(
+    #     "Upload a file",
+    #     type=["pdf", "png", "jpg", "jpeg", "bmp", "tiff"],
+    #     accept_multiple_files=True,
+    # )
+
     # 모델 선택 메뉴
-    selected_model = st.selectbox(
-        "Select Model",
-        ["llama3.1:8b-instruct-q8_0", "Qwen2.5-32B", "Llama-3.1-Nemotron-70B"],
-        index=0,
+    llm_mode = st.radio(
+        "Select Mode",
+        ["***ChatGPT***", "***Private GPT***"],
+        captions=["***GPT-4o-mini***", "***Llama-3.1-8B***"],
     )
     # 초기화 버튼 생성
     clear_btn = st.button("New Chat")
@@ -42,12 +49,11 @@ if "user_input" not in st.session_state:
 if "observation" not in st.session_state:
     st.session_state["observation"] = {}
 
-if "localGPT_model" not in st.session_state:
-    st.session_state["localGPT_model"] = selected_model
+if "selected_mode" not in st.session_state:
+    st.session_state["selected_mode"] = llm_mode
 
 if "localGPT_agent" not in st.session_state:
-    localGPT_model = st.session_state["localGPT_model"]
-    st.session_state["localGPT_agent"] = create_agent_with_chat_history(localGPT_model)
+    st.session_state["localGPT_agent"] = create_agent_with_chat_history(llm_mode)
 
 
 # 상수 정의
@@ -218,10 +224,6 @@ def print_related_info(related_info: List[str]):
 # 초기화 버튼이 눌리면...
 if clear_btn:
     st.session_state["localGPT_messages"] = []
-
-if selected_model != st.session_state["localGPT_model"]:
-    st.session_state["localGPT_model"] = selected_model
-    st.session_state["localGPT_agent"] = create_agent_with_chat_history(selected_model)
 
 
 def execute_agent(user_input: str):

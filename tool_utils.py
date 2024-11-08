@@ -47,7 +47,7 @@ def format_searched_news(search_results):
 def search_tavily(query: str) -> List[Dict[str, str]]:
     """Search Tavily by input keyword"""
     tavily_tool = TavilyClient()
-    results = tavily_tool.search(query=query, max_results=5, search_depth="advanced")
+    results = tavily_tool.search(query=query, max_results=5, search_depth="basic")
 
     result_docs = format_searched_tavily(results)
     return result_docs
