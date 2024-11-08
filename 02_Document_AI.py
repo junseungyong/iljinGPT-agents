@@ -157,6 +157,7 @@ def cache_file(files):
         #     st.session_state["filepath"] = file_paths
         else:
             st.warning("Not supported file type")
+            st.session_state["filepath"] = None
 
 
 if uploaded_files:
@@ -165,8 +166,8 @@ if uploaded_files:
     uploaded_files = None
 
 
-@st.cache_resource(show_spinner=False)
 def process_graph(file_paths):
+    print("process_graph")
     # 진행도 표시를 위한 컨테이너 생성
     progress_bar = st.progress(0)
     status_container = st.empty()
@@ -186,6 +187,7 @@ def process_graph(file_paths):
     total_nodes = len(graph.nodes)
 
     for i, output in enumerate(graph.stream(inputs)):
+        print(f"output: {output}")
         progress = (i + 1) / total_nodes
         progress_bar.progress(progress)
 
@@ -209,7 +211,7 @@ def process_graph(file_paths):
 
 if start_btn:
     file_paths = st.session_state["filepath"]
-    print(file_paths)
+    print(f"file_paths: {file_paths}")
     if file_paths is None:
         st.error("Please upload a file first.")
     else:

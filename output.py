@@ -56,13 +56,13 @@ def create_md(file_path, state: GraphState, type="translate"):
     md_output_file = os.path.join(output_folder, f"{filename}_{type}.md")
 
     # 페이지 번호 추가
-    if type == "translate":
+    if type == "translate" and state["translated_texts"] is not None:
         conbined_texts = add_page_numbers(state["translated_texts"])
-    elif type == "text_summary":
+    elif type == "text_summary" and state["texts_summary"] is not None:
         conbined_texts = add_page_numbers(state["texts_summary"])
-    elif type == "image_summary":
+    elif type == "image_summary" and state["images_summary"] is not None:
         conbined_texts = add_images(output_folder, state["images_summary"])
-    elif type == "table_summary":
+    elif type == "table_summary" and state["tables_summary"] is not None:
         conbined_texts = add_images(output_folder, state["tables_summary"])
     else:
         st.error("Invalid type")
