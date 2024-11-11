@@ -12,7 +12,8 @@ DOCUMENT_MAP = {
 }
 
 PROGRESS_MESSAGE_GRAPH_NODES = {
-    "split_pdf": "Splitting the document..",
+    "split_pdf": "Processing the document..",
+    "merge_image": "Processing the document..",
     "analyze_layout": "Analyzing layout..",
     "extract_page_metadata": "Extracting page metadata..",
     "extract_page_elements": "Extracting page elements..",

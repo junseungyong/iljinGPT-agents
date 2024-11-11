@@ -1,18 +1,16 @@
+import os
 import streamlit as st
+
 from langchain_core.messages.chat import ChatMessage
-from langchain_openai import ChatOpenAI
-from langchain_community.chat_models import ChatOllama
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
-from langchain_teddynote.prompts import load_prompt
+
 from dotenv import load_dotenv
 from langchain_teddynote import logging
 from layout_parser import graph_document_ai, GraphState
-import pprint
 
-import os
+
 from constants import PROGRESS_MESSAGE_GRAPH_NODES
-from output import create_md, create_and_download_zip, clean_cache_files
+from output import clean_cache_files
+from document_utils import download_files, check_file_type
 
 
 # API KEY 정보로드
@@ -65,36 +63,6 @@ with st.sidebar:
     start_btn = st.button("Document AI")
 
 
-def download_files(file_path, state):
-    zip_filepath = os.path.splitext(file_path)[0]  # 폴더 경로d
-
-    if translate_toggle:
-        create_md(file_path, state, "translate")
-
-    create_md(file_path, state, "text_summary")
-    create_md(file_path, state, "image_summary")
-    create_md(file_path, state, "table_summary")
-
-    zip_filename = create_and_download_zip(zip_filepath)  # 전체 경로를 받음
-
-    # 압축 파일 다운로드
-    if zip_filename and os.path.exists(
-        zip_filename
-    ):  # zip_filename이 None이 아닐 때 확인
-        with open(zip_filename, "rb") as f:
-            st.download_button(
-                label="Download Results",
-                data=f,
-                file_name=os.path.basename(zip_filename),  # 파일 이름만 사용
-                mime="application/zip",
-            )
-
-        # 임시 압축 파일 삭제
-        os.remove(zip_filename)  # zip_filename을 삭제
-    else:
-        st.error("Problem in creating zip file")
-
-
 # 이전 대화를 출력
 def print_messages():
     for chat_message in st.session_state["document_messages"]:
@@ -108,56 +76,37 @@ def add_message(role, message):
     )
 
 
-def create_chain(retriever):
-    # 단계 6: 프롬프트 생성(Create Prompt)
-    prompt = load_prompt("prompts/pdf-rag.yaml", encoding="utf-8")
-
-    # 단계 7: 언어모델(LLM) 생성
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    # llm = ChatOllama(model="gemma2-27B:latest", temperature=0)
-
-    # 단계 8: 체인(Chain) 생성
-    chain = (
-        {"context": retriever, "question": RunnablePassthrough()}
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
-
-    return chain
-
-
 # 파일을 캐시 저장(시간이 오래 걸리는 작업을 처리할 예정)
 def cache_file(files):
-    file_extension = os.path.splitext(files[0].name)[
-        1
-    ].lower()  # 첫 번째 파일의 확장자 확인
+    # 파일 확장자 확인
+    file_extension = check_file_type(files[0].name)
+
     # 업로드한 파일을 캐시 디랙토리에 저장합니다.
     file_paths = []
-    if files:  # 파일이 존재하는 경우
-        if file_extension == ".pdf":
-            if len(files) > 1:  # 파일이 1개 이상인 경우
-                st.warning("PDF file only support one file")
-                st.session_state["filepath"] = None
-            else:
-                file_content = files[0].read()  # 첫 번째 파일 읽기
-                file_path = f"./.cache/files/{files[0].name}"
-                with open(file_path, "wb") as f:
-                    f.write(file_content)
-                # 추가적인 PDF 파일 처리 코드 작성 가능
-                file_paths.append(file_path)
-                st.session_state["filepath"] = file_paths
-        # elif file_extension in [".png", ".jpg", ".jpeg", ".bmp", ".tiff"]:
-        #     for file in files:
-        #         file_content = file.read()  # 파일 읽기
-        #         file_path = f"./.cache/files/{file.name}"
-        #         with open(file_path, "wb") as f:
-        #             f.write(file_content)
-        #         file_paths.append(file_path)
-        #     st.session_state["filepath"] = file_paths
-        else:
-            st.warning("Not supported file type")
+
+    if file_extension == "pdf":
+        if len(files) > 1:  # 파일이 1개 이상인 경우
+            st.warning("PDF file only support one file")
             st.session_state["filepath"] = None
+        else:
+            file_content = files[0].read()  # 첫 번째 파일 읽기
+            file_path = f"./.cache/files/{files[0].name}"
+            with open(file_path, "wb") as f:
+                f.write(file_content)
+            # 추가적인 PDF 파일 처리 코드 작성 가능
+            file_paths.append(file_path)
+            st.session_state["filepath"] = file_paths
+    elif file_extension == "image":
+        for file in files:
+            file_content = file.read()  # 파일 읽기
+            file_path = f"./.cache/files/{file.name}"
+            with open(file_path, "wb") as f:
+                f.write(file_content)
+            file_paths.append(file_path)
+        st.session_state["filepath"] = file_paths
+    else:
+        st.warning("Not supported file type")
+        st.session_state["filepath"] = None
 
 
 if uploaded_files:
@@ -167,18 +116,27 @@ if uploaded_files:
 
 
 def process_graph(file_paths):
-    print("process_graph")
     # 진행도 표시를 위한 컨테이너 생성
     progress_bar = st.progress(0)
     status_container = st.empty()
 
     state = GraphState()
 
+    filetype = check_file_type(file_paths[0])
+    if filetype == "pdf":
+        file_paths = file_paths[0]
+    elif filetype == "image":
+        file_paths = file_paths
+    else:
+        st.error("Not supported file type")
+        return
+
     # 그래프 생성
     message_dict = PROGRESS_MESSAGE_GRAPH_NODES
     graph = graph_document_ai(translate_toggle)
     inputs = {
-        "filepath": file_paths[0],
+        "filepath": file_paths,
+        "filetype": filetype,
         "batch_size": 10,
         "translate_lang": translate_lang,
         "translate_toggle": translate_toggle,
@@ -196,10 +154,7 @@ def process_graph(file_paths):
 
         for key, value in output.items():
             # 다음 단계의 메시지를 표시
-            pprint.pprint(f"output from node '{key}':")
             status_container.text(f"{progress_percentage}% - {message_dict[key]}")
-            # pprint.pprint("---")
-            # pprint.pprint(value, indent=2, width=80, depth=None)
             state.update(value)
 
     # Progress bar를 100%로 설정하고 "Finished!" 메시지를 녹색으로 표시
@@ -211,19 +166,13 @@ def process_graph(file_paths):
 
 if start_btn:
     file_paths = st.session_state["filepath"]
-    print(f"file_paths: {file_paths}")
     if file_paths is None:
         st.error("Please upload a file first.")
     else:
         state = process_graph(file_paths)
-        download_files(file_paths[0], state)
+        download_files(file_paths[0], state, translate_toggle)
         st.session_state["filepath"] = None
-        # retriever = create_retriever_save_local(
-        #     file_paths, state, "RBA_index", translate_toggle
-        # )
-        # if retriever:
-        #     chain = create_chain(retriever)
-        #     st.session_state["chain"] = chain
+
         clean_cache_files()
 
 

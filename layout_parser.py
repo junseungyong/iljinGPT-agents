@@ -8,7 +8,7 @@ import json
 import requests
 from PIL import Image
 import PIL
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END, START
 import re
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
@@ -107,6 +107,39 @@ class DocumentParser:
 
 
 class ImageCropper:
+    @staticmethod
+    def load_image_without_rotation(file_path):
+        """
+        이미지를 열고 회전을 제거하는 메서드
+
+        :param file_path: 이미지 파일 경로
+        :return: 회전이 제거된 이미지 객체
+        """
+        # EXIF 태그를 무시하도록 설정
+        PIL.Image.LOAD_TRUNCATED_IMAGES = True
+
+        # 이미지 열기
+        img = Image.open(file_path)
+
+        # EXIF 데이터 가져오기
+        exif = img._getexif()
+
+        if exif:
+            # EXIF에서 방향 정보 찾기
+            orientation_key = 274  # 'Orientation' 태그의 키
+            if orientation_key in exif:
+                orientation = exif[orientation_key]
+
+                # 방향에 따라 이미지 회전
+                if orientation == 3:
+                    img = img.rotate(180, expand=True)
+                elif orientation == 6:
+                    img = img.rotate(270, expand=True)
+                elif orientation == 8:
+                    img = img.rotate(90, expand=True)
+
+        return img
+
     @staticmethod
     def pdf_to_image(pdf_file, page_num, dpi=300):
         """
@@ -371,6 +404,14 @@ DATA_INSIGHTS:
     return answer
 
 
+def route_document(state: GraphState):
+    filetype = state["filetype"]
+    if filetype == "pdf":
+        return "split_pdf"
+    else:
+        return "merge_image"
+
+
 def split_pdf(state: GraphState):
     """
     입력 PDF를 여러 개의 작은 PDF 파일로 분할합니다.
@@ -423,27 +464,22 @@ def split_pdf(state: GraphState):
 
 
 def merge_image(state: GraphState):
-    """
-    입력 이미지를 여러 개의 작은 이미지로 분할합니다.
+    filepaths = state["filepath"]
 
-    :param state: GraphState 객체, 이미지 파일 경로와 배치 크기 정보를 포함
-    :return: 분할된 이미지 파일 경로 목록을 포함한 GraphState 객체
-    """
-    filepath = state["image_filepaths"]
-    batch_size = state["batch_size"]
+    page_metadata = dict()
+    for page, filepath in enumerate(filepaths):
+        print(f"filepath: {filepath}")
+        img = Image.open(filepath)
+        width, height = img.size
+        metadata = {
+            "size": [
+                int(width),
+                int(height),
+            ],
+        }
+        page_metadata[page] = metadata
 
-    num_images = len(filepath)
-    print(f"총 이미지 수: {num_images}")
-
-    ret = []
-    for start_index in range(0, num_images, batch_size):
-        end_index = min(start_index + batch_size, num_images) - 1
-
-        input_file_basename = os.path.splitext(filepath[0])[0]
-        output_file = f"{input_file_basename}_{start_index:04d}_{end_index:04d}.png"
-        print(f"분할 이미지 생성: {output_file}")
-
-        ret.append(output_file)
+    return GraphState(split_filepaths=filepaths, page_metadata=page_metadata)
 
 
 def analyze_layout(state: GraphState):
@@ -469,7 +505,7 @@ def analyze_layout(state: GraphState):
 def extract_page_elements(state: GraphState):
     # 분석된 JSON 파일 목록을 가져옵니다.
     json_files = state["analyzed_files"]
-
+    file_type = state["filetype"]
     # 페이지별 요소를 저장할 딕셔너리를 초기화합니다.
     page_elements = dict()
 
@@ -477,9 +513,12 @@ def extract_page_elements(state: GraphState):
     element_id = 0
 
     # 각 JSON 파일을 순회하며 처리합니다.
-    for json_file in json_files:
-        # 파일명에서 시작 페이지 번호를 추출합니다.
-        start_page, _ = extract_start_end_page(json_file)
+    for i, json_file in enumerate(json_files):
+        if file_type == "image":
+            pass
+        else:
+            # 파일명에서 시작 페이지 번호를 추출합니다.
+            start_page, _ = extract_start_end_page(json_file)
 
         # JSON 파일을 열어 데이터를 로드합니다.
         with open(json_file, "r") as f:
@@ -488,10 +527,12 @@ def extract_page_elements(state: GraphState):
         # JSON 데이터의 각 요소를 처리합니다.
         for element in data["elements"]:
             # 원본 페이지 번호를 정수로 변환합니다.
-            original_page = int(element["page"])
-            # 전체 문서 기준의 상대적 페이지 번호를 계산합니다.
-            relative_page = start_page + original_page - 1
-
+            if file_type == "image":
+                relative_page = i
+            else:
+                original_page = int(element["page"])
+                # 전체 문서 기준의 상대적 페이지 번호를 계산합니다.
+                relative_page = start_page + original_page - 1
             # 해당 페이지의 요소 리스트가 없으면 새로 생성합니다.
             if relative_page not in page_elements:
                 page_elements[relative_page] = []
@@ -569,16 +610,24 @@ def crop_image(state: GraphState):
     :param state: GraphState 객체
     :return: 크롭된 이미지 정보가 포함된 GraphState 객체
     """
-    pdf_file = state["filepath"]  # PDF 파일 경로
+    files = state["filepath"]  # 파일 경로
+    file_type = state["filetype"]
     page_numbers = state["page_numbers"]  # 처리할 페이지 번호 목록
-    output_folder = os.path.splitext(pdf_file)[0]  # 출력 폴더 경로 설정
+    if file_type == "image":
+        output_folder = os.path.splitext(files[0])[0]  # 출력 폴더 경로 설정
+    else:
+        output_folder = os.path.splitext(files)[0]  # 출력 폴더 경로 설정
     os.makedirs(output_folder, exist_ok=True)  # 출력 폴더 생성
 
     cropped_images = dict()  # 크롭된 이미지 정보를 저장할 딕셔너리
     for page_num in page_numbers:
-        pdf_image = ImageCropper.pdf_to_image(
-            pdf_file, page_num
-        )  # PDF 페이지를 이미지로 변환
+        if file_type == "pdf":
+            image_file = ImageCropper.pdf_to_image(
+                files, page_num
+            )  # PDF 페이지를 이미지로 변환
+        elif file_type == "image":
+            image_file = ImageCropper.load_image_without_rotation(files[page_num])
+
         for element in state["page_elements"][page_num]["image_elements"]:
             if element["category"] == "figure":
                 # 이미지 요소의 좌표를 정규화
@@ -589,7 +638,7 @@ def crop_image(state: GraphState):
                 # 크롭된 이미지 저장 경로 설정
                 output_file = os.path.join(output_folder, f"{element['id']}.png")
                 # 이미지 크롭 및 저장
-                ImageCropper.crop_image(pdf_image, normalized_coordinates, output_file)
+                ImageCropper.crop_image(image_file, normalized_coordinates, output_file)
                 cropped_images[element["id"]] = output_file
                 print(f"page:{page_num}, id:{element['id']}, path: {output_file}")
     return GraphState(
@@ -604,16 +653,23 @@ def crop_table(state: GraphState):
     :param state: GraphState 객체
     :return: 크롭된 표 이미지 정보가 포함된 GraphState 객체
     """
-    pdf_file = state["filepath"]  # PDF 파일 경로
+    files = state["filepath"]  # PDF 파일 경로
+    file_type = state["filetype"]
     page_numbers = state["page_numbers"]  # 처리할 페이지 번호 목록
-    output_folder = os.path.splitext(pdf_file)[0]  # 출력 폴더 경로 설정
+    if file_type == "image":
+        output_folder = os.path.splitext(files[0])[0]  # 출력 폴더 경로 설정
+    else:
+        output_folder = os.path.splitext(files)[0]  # 출력 폴더 경로 설정
     os.makedirs(output_folder, exist_ok=True)  # 출력 폴더 생성
 
     cropped_images = dict()  # 크롭된 표 이미지 정보를 저장할 딕셔너리
     for page_num in page_numbers:
-        pdf_image = ImageCropper.pdf_to_image(
-            pdf_file, page_num
-        )  # PDF 페이지를 이미지로 변환
+        if file_type == "pdf":
+            image_file = ImageCropper.pdf_to_image(
+                files, page_num
+            )  # PDF 페이지를 이미지로 변환
+        elif file_type == "image":
+            image_file = ImageCropper.load_image_without_rotation(files[page_num])
         for element in state["page_elements"][page_num]["table_elements"]:
             if element["category"] == "table":
                 # 표 요소의 좌표를 정규화
@@ -624,7 +680,7 @@ def crop_table(state: GraphState):
                 # 크롭된 표 이미지 저장 경로 설정
                 output_file = os.path.join(output_folder, f"{element['id']}.png")
                 # 표 이미지 크롭 및 저장
-                ImageCropper.crop_image(pdf_image, normalized_coordinates, output_file)
+                ImageCropper.crop_image(image_file, normalized_coordinates, output_file)
                 cropped_images[element["id"]] = output_file
                 print(f"page:{page_num}, id:{element['id']}, path: {output_file}")
     return GraphState(
@@ -852,8 +908,9 @@ def clean_up(state: GraphState):
 def graph_document_ai(translate_toggle: bool):
     workflow = StateGraph(GraphState)
 
-    workflow.set_entry_point("split_pdf")
     workflow.add_node("split_pdf", split_pdf)
+    workflow.add_node("merge_image", merge_image)
+
     workflow.add_node("analyze_layout", analyze_layout)
     workflow.add_node("extract_page_elements", extract_page_elements)
     workflow.add_node("extract_tag_elements_per_page", extract_tag_elements_per_page)
@@ -876,7 +933,16 @@ def graph_document_ai(translate_toggle: bool):
     workflow.add_node("create_table_summary", create_table_summary)
     # workflow.add_node("clean_up", clean_up)
 
+    workflow.add_conditional_edges(
+        START,
+        route_document,
+        {
+            "split_pdf": "split_pdf",
+            "merge_image": "merge_image",
+        },
+    )
     workflow.add_edge("split_pdf", "analyze_layout")
+    workflow.add_edge("merge_image", "analyze_layout")
     workflow.add_edge("analyze_layout", "extract_page_elements")
     workflow.add_edge("extract_page_elements", "extract_tag_elements_per_page")
     workflow.add_edge("extract_tag_elements_per_page", "extract_page_numbers")
