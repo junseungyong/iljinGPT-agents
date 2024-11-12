@@ -502,6 +502,18 @@ def analyze_layout(state: GraphState):
     return GraphState(analyzed_files=sorted(analyzed_files))
 
 
+def add_analyzed_layout(state: GraphState):
+    split_files = state["split_filepaths"]
+
+    analyzed_files = []
+
+    for file in split_files:
+        output_file = os.path.splitext(file)[0] + ".json"
+        analyzed_files.append(output_file)
+
+    return GraphState(analyzed_files=sorted(analyzed_files))
+
+
 def extract_page_elements(state: GraphState):
     # 분석된 JSON 파일 목록을 가져옵니다.
     json_files = state["analyzed_files"]
@@ -744,6 +756,7 @@ def extract_doc_metadata(state: GraphState):
 
 def translate_text(state: GraphState):
     # state에서 텍스트 데이터를 가져옵니다.
+    page_numbers = state["page_numbers"]
     texts = state["texts"]
     translate_lang = state["translate_lang"]
 
@@ -761,11 +774,14 @@ def translate_text(state: GraphState):
 
     # text_summary_chain을 사용하여 일괄 처리로 요약을 생성합니다.
     text_tranlate_chain = create_text_translate_chain()
-    summaries = text_tranlate_chain.batch(inputs)
+    translation_results = text_tranlate_chain.batch(inputs)
 
-    # 생성된 요약을 페이지 번호와 함께 딕셔너리에 저장합니다.
-    for page_num, summary in enumerate(summaries):
-        translated_texts[page_num] = summary
+    # translation_results를 순서대로 페이지 번호와 매핑
+    for page_num, translation in zip(page_numbers, translation_results):
+        translated_texts[page_num] = translation
+
+    # for page_num, translation in enumerate(translation_results):
+    #     translated_texts[page_num] = translation
 
     # 요약된 텍스트를 포함한 새로운 GraphState 객체를 반환합니다.
     return GraphState(translated_texts=translated_texts)
@@ -773,13 +789,13 @@ def translate_text(state: GraphState):
 
 def create_text_summary(state: GraphState):
     # state에서 텍스트 데이터를 가져옵니다.
+    page_numbers = state["page_numbers"]
     translate_toggle = state["translate_toggle"]
+    translate_lang = state["translate_lang"]
     if translate_toggle:
         texts = state["translated_texts"]
-        translate_lang = state["translate_lang"]
     else:
         texts = state["texts"]
-        translate_lang = state["translate_lang"]
 
     # 요약된 텍스트를 저장할 딕셔너리를 초기화합니다.
     text_summary = dict()
@@ -797,9 +813,13 @@ def create_text_summary(state: GraphState):
     text_summary_chain = create_text_summary_chain()
     summaries = text_summary_chain.batch(inputs)
 
+    # translation_results를 순서대로 페이지 번호와 매핑
+    for page_num, translation in zip(page_numbers, summaries):
+        text_summary[page_num] = translation
+
     # 생성된 요약을 페이지 번호와 함께 딕셔너리에 저장합니다.
-    for page_num, summary in enumerate(summaries):
-        text_summary[page_num] = summary
+    # for page_num, summary in enumerate(summaries):
+    #     text_summary[page_num] = summary
 
     # 요약된 텍스트를 포함한 새로운 GraphState 객체를 반환합니다.
     return GraphState(texts_summary=text_summary)
@@ -912,9 +932,11 @@ def graph_document_ai(translate_toggle: bool):
     workflow.add_node("merge_image", merge_image)
 
     workflow.add_node("analyze_layout", analyze_layout)
+
     workflow.add_node("extract_page_elements", extract_page_elements)
     workflow.add_node("extract_tag_elements_per_page", extract_tag_elements_per_page)
     workflow.add_node("extract_page_numbers", extract_page_numbers)
+
     workflow.add_node("crop_image", crop_image)
     workflow.add_node("crop_table", crop_table)
     workflow.add_node("extract_page_text", extract_page_text)
