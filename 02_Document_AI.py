@@ -11,7 +11,8 @@ from layout_parser import graph_document_ai, GraphState
 from constants import PROGRESS_MESSAGE_GRAPH_NODES
 from output import clean_cache_files
 from document_utils import download_files, check_file_type
-
+from retriever import create_ensemble_retriever
+from chat_utils import create_chain
 
 # API KEY 정보로드
 load_dotenv()
@@ -35,9 +36,12 @@ if not os.path.exists(".cache/embeddings"):
 st.title("Document AI 💬")
 
 # 처음 1번만 실행하기 위한 코드
-if "messages" not in st.session_state:
+if "document_messages" not in st.session_state:
     # 대화기록을 저장하기 위한 용도로 생성한다.
     st.session_state["document_messages"] = []
+
+if "retriever" not in st.session_state:
+    st.session_state["retriever"] = None
 
 if "chain" not in st.session_state:
     # 아무런 파일을 업로드 하지 않을 경우
@@ -65,12 +69,14 @@ with st.sidebar:
 
 # 이전 대화를 출력
 def print_messages():
+    print(f"print_messages: {st.session_state['document_messages']}")
     for chat_message in st.session_state["document_messages"]:
         st.chat_message(chat_message.role).write(chat_message.content)
 
 
 # 새로운 메시리를 추가
 def add_message(role, message):
+    print(f"add_message: {role}, {message}")
     st.session_state["document_messages"].append(
         ChatMessage(role=role, content=message)
     )
@@ -173,6 +179,10 @@ if start_btn:
         download_files(file_paths[0], state, translate_toggle)
         st.session_state["filepath"] = None
 
+        retriever = create_ensemble_retriever(state["documents"])
+        st.session_state["retriever"] = retriever
+        chain = create_chain()
+        st.session_state["chain"] = chain
         clean_cache_files()
 
 
@@ -186,6 +196,7 @@ user_input = st.chat_input("Ask your question!")
 warning_msg = st.empty()
 
 if user_input:
+    retriever = st.session_state["retriever"]
     # chain을 생성
     chain = st.session_state["chain"]
 
@@ -193,7 +204,9 @@ if user_input:
         # 사용자의 입력
         st.chat_message("user").write(user_input)
         # 스트리밍 호출
-        response = chain.stream(user_input)
+        contexts = retriever.invoke(user_input)
+        response = chain.stream({"context": contexts, "question": user_input})
+
         with st.chat_message("assistant"):
             # 빈 공간(컨테이너)를 만들어서, 여기에 토큰을 스트리밍 출력한다.
             container = st.empty()

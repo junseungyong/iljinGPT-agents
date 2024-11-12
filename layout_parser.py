@@ -44,6 +44,7 @@ class GraphState(TypedDict):
     tables: list[str]  # table
     tables_summary: dict[int, str]  # table summary
     texts: list[str]  # text
+    documents: list[Document]  # documents
     translated_texts: list[str]  # translated text
     texts_summary: list[str]  # text summary
     image_summary_data_batches: list[dict]  # 이미지 요약 데이터 배치
@@ -701,6 +702,7 @@ def crop_table(state: GraphState):
 
 
 def extract_page_text(state: GraphState):
+    files = state["filepath"]
     page_numbers = state["page_numbers"]
     extracted_texts = dict()
 
@@ -736,7 +738,14 @@ def extract_page_text(state: GraphState):
                         f"Unexpected table_element structure on page {page_num}: {table_element}"
                     )
 
-    return GraphState(texts=extracted_texts)
+        documents = []
+        source = os.path.splitext(files)[0]
+        for key, value in extracted_texts.items():
+            page_number = key
+            text = value
+            metadata = {"page": page_number, "source": source}
+            documents.append(Document(page_content=text, metadata=metadata))
+    return GraphState(texts=extracted_texts, documents=documents)
 
 
 def extract_doc_metadata(state: GraphState):
@@ -780,9 +789,6 @@ def translate_text(state: GraphState):
     for page_num, translation in zip(page_numbers, translation_results):
         translated_texts[page_num] = translation
 
-    # for page_num, translation in enumerate(translation_results):
-    #     translated_texts[page_num] = translation
-
     # 요약된 텍스트를 포함한 새로운 GraphState 객체를 반환합니다.
     return GraphState(translated_texts=translated_texts)
 
@@ -816,10 +822,6 @@ def create_text_summary(state: GraphState):
     # translation_results를 순서대로 페이지 번호와 매핑
     for page_num, translation in zip(page_numbers, summaries):
         text_summary[page_num] = translation
-
-    # 생성된 요약을 페이지 번호와 함께 딕셔너리에 저장합니다.
-    # for page_num, summary in enumerate(summaries):
-    #     text_summary[page_num] = summary
 
     # 요약된 텍스트를 포함한 새로운 GraphState 객체를 반환합니다.
     return GraphState(texts_summary=text_summary)
