@@ -8,35 +8,35 @@ from langchain_core.documents import Document
 from messages_util import AgentStreamParser, AgentCallbacks
 
 from agent_util import create_agent_with_chat_history
-
+from retriever import create_retriever_from_PDF
 from typing import List, Union
 
-import time  # 파일 상단에 추가
+import time
 
-# API KEY 정보로드
+# Load API KEY
 load_dotenv()
 
-# 프로젝트 이름을 입력합니다.
+# Set project name
 logging.langsmith("Local GPT")
 
 st.title("Local GPT 💬")
 
-# 사이드바 생성
+# Create sidebar
 with st.sidebar:
-    # # 파일 업로드
-    # uploaded_files = st.file_uploader(
-    #     "Upload a file",
-    #     type=["pdf", "png", "jpg", "jpeg", "bmp", "tiff"],
-    #     accept_multiple_files=True,
-    # )
+    # Upload file
+    uploaded_files = st.file_uploader(
+        "Upload a file",
+        type=["pdf", "png", "jpg", "jpeg", "bmp", "tiff"],
+        accept_multiple_files=True,
+    )
 
-    # 모델 선택 메뉴
+    # Select model
     llm_mode = st.radio(
         "Select Mode",
         ["***ChatGPT***", "***Private GPT***"],
         captions=["***GPT-4o-mini***", "***Llama-3.1-8B***"],
     )
-    # 초기화 버튼 생성
+    # Create clear button
     clear_btn = st.button("New Chat")
 
 
@@ -56,28 +56,34 @@ if "localGPT_agent" not in st.session_state:
     st.session_state["localGPT_agent"] = create_agent_with_chat_history(llm_mode)
 
 
-# 상수 정의
+if uploaded_files:
+    # Cache file
+    retriever = create_retriever_from_PDF(uploaded_files)
+    uploaded_files = None
+
+
+# Define constants
 class MessageRole:
-    USER = "user"  # 사용자 메시지 타입
-    ASSISTANT = "assistant"  # 어시스턴트 메시지 타입
+    USER = "user"  # Type of user message
+    ASSISTANT = "assistant"  # Type of assistant message
 
 
 class MessageType:
     """
-    메시지 타입을 정의하는 클래스입니다.
+    Define message types
     """
 
-    SOURCE = "source"  # 소스 메시지
-    TEXT = "text"  # 텍스트 메시지
-    RELATED_INFO = "related_info"  # 관련 정보 메시지
+    SOURCE = "source"  # Source message
+    TEXT = "text"  # Text message
+    RELATED_INFO = "related_info"  # Related information message
 
 
 def tool_callback(tool) -> None:
     """
-    도구 실행 결과를 처리하는 콜백 함수입니다.
+    Callback function to process tool execution results
 
     Args:
-        tool (dict): 실행된 도구 정보
+        tool (dict): Tool execution information
     """
     if tool_name := tool.get("tool"):
         tool_input = tool.get("tool_input", {})
@@ -92,10 +98,10 @@ def tool_callback(tool) -> None:
 
 def observation_callback(observation) -> None:
     """
-    관찰 결과를 처리하는 콜백 함수입니다.
+    Callback function to process observation results
 
     Args:
-        observation (dict): 관찰 결과
+        observation (dict): Observation results
     """
     if "observation" in observation:
         action = observation["action"]
@@ -105,7 +111,7 @@ def observation_callback(observation) -> None:
             st.error(obs)
             st.session_state["localGPT_messages"][-1][
                 1
-            ].clear()  # 에러 발생 시 마지막 메시지 삭제
+            ].clear()  # Delete last message if error occurs
 
         st.session_state["observation"] = {"tool": tool_name, "observation": obs}
         if tool_name == "search_tavily":
@@ -118,25 +124,25 @@ def observation_callback(observation) -> None:
 
 def result_callback(result: str) -> None:
     """
-    최종 결과를 처리하는 콜백 함수입니다.
+    Callback function to process final results
 
     Args:
-        result (str): 최종 결과
+        result (str): Final results
     """
-    global ai_answer  # 전역 변수로 선언
+    global ai_answer  # Declare as global variable
 
     if not hasattr(result_callback, "ai_answer"):
-        result_callback.ai_answer = ""  # 초기화
+        result_callback.ai_answer = ""  # Initialize
 
     result_callback.ai_answer += result
     st.markdown(result_callback.ai_answer)
     add_message(MessageRole.ASSISTANT, [MessageType.TEXT, result_callback.ai_answer])
 
 
-# 이전 대화를 출력
+# Print previous conversation
 def print_messages():
     """
-    저장된 메시지를 화면에 출력하는 함수입니다.
+    Print saved messages
     """
     for role, content_list in st.session_state["localGPT_messages"]:
         if role == MessageRole.USER:
@@ -161,22 +167,27 @@ def print_messages():
 # 새로운 메시지를 추가
 def add_message(role: MessageRole, content: List[Union[MessageType, any]]):
     """
-    새로운 메시지를 저장하는 함수입니다.
+    Add new message
 
     Args:
-        role (MessageRole): 메시지 역할 (사용자 또는 어시스턴트)
-        content (List[Union[MessageType, str]]): 메시지 내용
+        role (MessageRole): Message role (user or assistant)
+        content (List[Union[MessageType, str]]): Message content
     """
     messages = st.session_state["localGPT_messages"]
     if messages and messages[-1][0] == role:
-        messages[-1][1].extend([content])  # 같은 역할의 연속된 메시지는 하나로 합칩니다
+        messages[-1][1].extend(
+            [content]
+        )  # Consecutive messages with the same role are combined
     else:
-        messages.append([role, [content]])  # 새로운 역할의 메시지는 새로 추가합니다
+        messages.append([role, [content]])  # New messages with a new role are added
 
 
 def print_source_message(observation: List[Document]):
     """
-    소스 메시지를 출력하는 함수입니다.
+    Print source messages
+
+    Args:
+        observation (List[Document]): Observation results
     """
 
     cols = st.columns(4)
@@ -191,7 +202,7 @@ def print_source_message(observation: List[Document]):
                     use_container_width=True,
                 )
 
-    # 마지막 컬럼은 popover로 나머지 문서들 표시
+    # last column is displayed as a popover for the remaining documents
     with cols[3]:
         if len(observation) > 3:
             more_container = st.empty()
@@ -207,16 +218,16 @@ def print_source_message(observation: List[Document]):
 
 def print_related_info(related_info: List[str]):
     """
-    관련 정보를 출력하는 함수
+    Print related information
 
     Args:
-        related_info (List[str]): 출력할 관련 정보 리스트
+        related_info (List[str]): Related information list
     """
     with st.expander("Related Information"):
         for i, question in enumerate(related_info):
             key = f"related_info_{i}_{hash(question)}"
             if st.button(question, key=key):
-                # 직접 chat_message를 생성하지 않고 session state만 업데이트
+                # Do not create chat_message directly, only update session state
                 st.session_state["user_input"] = question
                 st.rerun()
 
@@ -225,13 +236,17 @@ def print_related_info(related_info: List[str]):
 if clear_btn:
     st.session_state["localGPT_messages"] = []
 
+if llm_mode != st.session_state["selected_mode"]:
+    st.session_state["localGPT_agent"] = create_agent_with_chat_history(llm_mode)
+    st.session_state["selected_mode"] = llm_mode
+
 
 def execute_agent(user_input: str):
     """
-    사용자의 질문을 처리하고 응답을 생성하는 함수입니다.
+    Process user's question and generate response
 
     Args:
-        query (str): 사용자의 질문
+        query (str): User's question
     """
 
     localGPT_agent = st.session_state["localGPT_agent"]
@@ -261,19 +276,19 @@ def execute_agent(user_input: str):
     st.session_state["observation"] = {}
 
 
-# 이전 대화 기록 출력
+# Print previous conversation
 print_messages()
 
-# 새로운 입력 처리 (chat input 또는 related info 버튼 클릭)
+# Process new input (chat input or related info button click)
 if temp_input := st.chat_input("Ask me anything!"):
     st.session_state["user_input"] = temp_input
 
 if st.session_state["user_input"]:
     user_input = st.session_state["user_input"]
     st.chat_message("user").write(user_input)
-    st.session_state["user_input"] = ""  # 입력 초기화
+    st.session_state["user_input"] = ""  # Reset input
 
     add_message(MessageRole.USER, [MessageType.TEXT, user_input])
 
-    # 에이전트 실행
+    # Run agent
     execute_agent(user_input)

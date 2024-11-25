@@ -23,8 +23,10 @@ from langchain_core.runnables import chain
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.output_parsers import PydanticOutputParser
 
+import ollama
 
-# GraphState 상태를 저장하는 용도로 사용합니다.
+
+# Class to store GraphState
 class GraphState(TypedDict):
     filepath: str  # path
     filetype: str  # pdf
@@ -47,8 +49,8 @@ class GraphState(TypedDict):
     documents: list[Document]  # documents
     translated_texts: list[str]  # translated text
     texts_summary: list[str]  # text summary
-    image_summary_data_batches: list[dict]  # 이미지 요약 데이터 배치
-    table_summary_data_batches: list[dict]  # 표 요약 데이터 배치
+    image_summary_data_batches: list[dict]  # image summary data batches
+    table_summary_data_batches: list[dict]  # table summary data batches
 
 
 class ExtractMetadata(BaseModel):
@@ -60,49 +62,49 @@ class ExtractMetadata(BaseModel):
 class DocumentParser:
     def __init__(self, api_key):
         """
-        DocumentParser 클래스의 생성자
+        Constructor for DocumentParser class
 
-        :param api_key: Upstage API 인증을 위한 API 키
+        :param api_key: API key for Upstage API authentication
         """
         self.api_key = api_key
 
     def _upstage_document_parse(self, input_file):
         """
-        Upstage API를 사용하여 문서 분석
+        Analyze document using Upstage API
 
-        :param input_file: 분석할 문서 파일 경로
-        :return: 분석 결과
+        :param input_file: Path to the document file to analyze
+        :return: Path to the analysis result
         """
-        # Upstage API 엔드포인트 URL
+        # Upstage API endpoint URL
         url = "https://api.upstage.ai/v1/document-ai/document-parse"
-        # 헤더 설정
+        # Set header
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        # 파일 업로드를 위한 파일 객체 생성
+        # Create file object for file upload
         files = {"document": open(input_file, "rb")}
 
         data = {"output_formats": "['html', 'markdown', 'text']"}
 
-        # API 요청 보내기
+        # Send API request
         response = requests.post(url, headers=headers, files=files, data=data)
 
-        # 요청이 성공하면 결과를 파일에 저장
+        # If the request is successful, save the result to a file
         if response.status_code == 200:
             output_file = os.path.splitext(input_file)[0] + ".json"
-            # 결과를 파일에 저장
+            # Save the result to a file
             with open(output_file, "w") as f:
                 json.dump(response.json(), f, ensure_ascii=False)
 
             return output_file
         else:
-            # 요청이 실패하면 오류 메시지 반환
-            raise ValueError(f"API 요청 실패: {response.status_code}")
+            # If the request fails, return an error message
+            raise ValueError(f"API request failed: {response.status_code}")
 
     def execute(self, input_file):
         """
-        문서 분석 실행
+        Execute document analysis
 
-        :param input_file: 분석할 문서 파일 경로
-        :return: 분석 결과 파일 경로
+        :param input_file: Path to the document file to analyze
+        :return: Path to the analysis result
         """
         return self._upstage_document_parse(input_file)
 
@@ -111,27 +113,27 @@ class ImageCropper:
     @staticmethod
     def load_image_without_rotation(file_path):
         """
-        이미지를 열고 회전을 제거하는 메서드
+        Method to load image and remove rotation
 
-        :param file_path: 이미지 파일 경로
-        :return: 회전이 제거된 이미지 객체
+        :param file_path: Path to the image file
+        :return: Image object with removed rotation
         """
-        # EXIF 태그를 무시하도록 설정
+        # Ignore EXIF tags
         PIL.Image.LOAD_TRUNCATED_IMAGES = True
 
-        # 이미지 열기
+        # Open image
         img = Image.open(file_path)
 
-        # EXIF 데이터 가져오기
+        # Get EXIF data
         exif = img._getexif()
 
         if exif:
-            # EXIF에서 방향 정보 찾기
-            orientation_key = 274  # 'Orientation' 태그의 키
+            # Find orientation information from EXIF
+            orientation_key = 274  # 'Orientation' tag key
             if orientation_key in exif:
                 orientation = exif[orientation_key]
 
-                # 방향에 따라 이미지 회전
+                # Rotate image according to orientation
                 if orientation == 3:
                     img = img.rotate(180, expand=True)
                 elif orientation == 6:
@@ -144,11 +146,11 @@ class ImageCropper:
     @staticmethod
     def pdf_to_image(pdf_file, page_num, dpi=300):
         """
-        PDF 파일의 특정 페이지를 이미지로 변환하는 메서드
+        Method to convert a specific page of a PDF file to an image
 
-        :param page_num: 변환할 페이지 번호 (1부터 시작)
-        :param dpi: 이미지 해상도 (기본값: 300)
-        :return: 변환된 이미지 객체
+        :param page_num: Page number to convert (starts from 1)
+        :param dpi: Image resolution (default: 300)
+        :return: Converted image object
         """
         with pymupdf.open(pdf_file) as doc:
             page = doc[page_num].get_pixmap(dpi=dpi)
@@ -159,11 +161,11 @@ class ImageCropper:
     @staticmethod
     def normalize_coordinates(coordinates):
         """
-        좌표를 정규화하는 정적 메서드
+        Method to normalize coordinates
 
-        :param coordinates: 원본 좌표 리스트
-        :param output_page_size: 출력 페이지 크기 [너비, 높이]
-        :return: 정규화된 좌표 (x1, y1, x2, y2)
+        :param coordinates: Original coordinates list
+        :param output_page_size: Output page size [width, height]
+        :return: Normalized coordinates (x1, y1, x2, y2)
         """
         x_values = [coord["x"] for coord in coordinates]
         y_values = [coord["y"] for coord in coordinates]
@@ -179,11 +181,11 @@ class ImageCropper:
     @staticmethod
     def crop_image(img, coordinates, output_file):
         """
-        이미지를 주어진 좌표에 따라 자르고 저장하는 정적 메서드
+        Method to crop image and save it according to given coordinates
 
-        :param img: 원본 이미지 객체
-        :param coordinates: 정규화된 좌표 (x1, y1, x2, y2)
-        :param output_file: 저장할 파일 경로
+        :param img: Original image object
+        :param coordinates: Normalized coordinates (x1, y1, x2, y2)
+        :param output_file: Path to save the file
         """
         img_width, img_height = img.size
         x1, y1, x2, y2 = [
@@ -195,11 +197,11 @@ class ImageCropper:
 
     # def crop_image(img, bounding_box, output_file):
     #     """
-    #     이미지를 주어진 bounding box에 따라 자르고 저장하는 정적 메서드
+    #     Method to crop image and save it according to given bounding box
 
-    #     :param img: 원본 이미지 객체
-    #     :param bounding_box: 크롭할 영역의 좌표 리스트 [{"x": x, "y": y}, ...]
-    #     :param output_file: 저장할 파일 경로
+    #     :param img: Original image object
+    #     :param bounding_box: Coordinates list of the area to crop [{"x": x, "y": y}, ...]
+    #     :param output_file: Path to save the file
     #     """
     #     x_values = [coord["x"] for coord in bounding_box]
     #     y_values = [coord["y"] for coord in bounding_box]
@@ -211,23 +213,23 @@ class ImageCropper:
 
 def extract_start_end_page(filename):
     """
-    파일 이름에서 시작 페이지와 끝 페이지 번호를 추출하는 함수입니다.
+    Method to extract start and end page numbers from filename
 
-    :param filename: 분석할 파일의 이름
-    :return: 시작 페이지 번호와 끝 페이지 번호를 튜플로 반환
+    :param filename: Name of the file to analyze
+    :return: Start and end page numbers as a tuple
     """
-    # 파일 경로에서 파일 이름만 추출
+    # Extract file name from file path
     file_name = os.path.basename(filename)
-    # 파일 이름을 '_' 기준으로 분리
+    # Split file name by '_'
     file_name_parts = file_name.split("_")
 
     if len(file_name_parts) >= 3:
-        # 파일 이름의 뒤에서 두 번째 부분에서 숫자를 추출하여 시작 페이지로 설정
+        # Extract number from the second last part of the file name as start page
         start_page = int(re.findall(r"(\d+)", file_name_parts[-2])[0])
-        # 파일 이름의 마지막 부분에서 숫자를 추출하여 끝 페이지로 설정
+        # Extract number from the last part of the file name as end page
         end_page = int(re.findall(r"(\d+)", file_name_parts[-1])[0])
     else:
-        # 파일 이름 형식이 예상과 다를 경우 기본값 설정
+        # If the file name format is different from expected, set default values
         start_page, end_page = 0, 0
 
     return start_page, end_page
@@ -276,15 +278,10 @@ def create_text_summary_chain():
         """
     )
 
-    # ChatOpenAI 모델의 또 다른 인스턴스를 생성합니다. (이전 인스턴스와 동일한 설정)
-    # llm = ChatOpenAI(
-    #     model_name="gpt-4o-mini",
-    #     temperature=0,
-    # )
     llm = ChatOllama(model="gemma2-27B:latest", temperature=0)
 
-    # 문서 요약을 위한 체인을 생성합니다.
-    # 이 체인은 여러 문서를 입력받아 하나의 요약된 텍스트로 결합합니다.
+    # Create a chain for document summarization
+    # This chain takes multiple documents as input and combines them into one summarized text
     text_summary_chain = create_stuff_documents_chain(llm, prompt)
 
     return text_summary_chain
@@ -302,14 +299,9 @@ def create_text_translate_chain():
         """
     )
 
-    # ChatOpenAI 모델의 또 다른 인스턴스를 생성합니다. (이전 인스턴스와 동일한 설정)
-    # llm = ChatOpenAI(
-    #     model_name="gpt-4o-mini",
-    #     temperature=0,
-    # )
     llm = ChatOllama(model="gemma2-27B:latest", temperature=0)
 
-    # 문서 번역을 위한 체인을 생성합니다.
+    # Create a chain for document translation
     text_tranlate_chain = create_stuff_documents_chain(llm, prompt)
 
     return text_tranlate_chain
@@ -319,8 +311,8 @@ def create_text_translate_chain():
 def extract_image_summary(data_batches):
     # 객체 생성
     llm = ChatOpenAI(
-        temperature=0,  # 창의성 (0.0 ~ 2.0)
-        model_name="gpt-4o-mini",  # 모델명
+        temperature=0,
+        model_name="gpt-4o-mini",
     )
 
     system_prompt = """You are an expert in extracting useful information from IMAGE.
@@ -345,15 +337,16 @@ Output Format:
 TITLE:
 SUMMARY:
 ENTITIES:
+DATA_INSIGHTS:
 """
         image_paths.append(image_path)
         system_prompts.append(system_prompt)
         user_prompts.append(user_prompt_template)
 
-    # 멀티모달 객체 생성
+    # Create a multimodal object
     multimodal_llm = MultiModal(llm)
 
-    # 이미지 파일로 부터 질의
+    # Query from image file
     answer = multimodal_llm.batch(
         image_paths, system_prompts, user_prompts, display_image=False
     )
@@ -362,10 +355,10 @@ ENTITIES:
 
 @chain
 def extract_table_summary(data_batches):
-    # 객체 생성
+    # Create an object
     llm = ChatOpenAI(
-        temperature=0,  # 창의성 (0.0 ~ 2.0)
-        model_name="gpt-4o-mini",  # 모델명
+        temperature=0,
+        model_name="gpt-4o-mini",
     )
 
     system_prompt = """You are an expert in extracting useful information from TABLE. With a given image, your task is to extract key entities, summarize them, and write useful information.
@@ -395,10 +388,10 @@ DATA_INSIGHTS:
         system_prompts.append(system_prompt)
         user_prompts.append(user_prompt_template)
 
-    # 멀티모달 객체 생성
+    # Create a multimodal object
     multimodal_llm = MultiModal(llm)
 
-    # 이미지 파일로 부터 질의
+    # Query from image file
     answer = multimodal_llm.batch(
         image_paths, system_prompts, user_prompts, display_image=False
     )
@@ -415,19 +408,19 @@ def route_document(state: GraphState):
 
 def split_pdf(state: GraphState):
     """
-    입력 PDF를 여러 개의 작은 PDF 파일로 분할합니다.
+    Split the input PDF into multiple smaller PDF files.
 
-    :param state: GraphState 객체, PDF 파일 경로와 배치 크기 정보를 포함
-    :return: 분할된 PDF 파일 경로 목록을 포함한 GraphState 객체
+    :param state: GraphState object, containing the PDF file path and batch size information
+    :return: GraphState object containing the list of split PDF file paths
     """
-    # PDF 파일 경로와 배치 크기 추출
+    # Extract the PDF file path and batch size
     filepath = state["filepath"]
     batch_size = state["batch_size"]
 
-    # PDF 파일 열기
+    # Open the PDF file
     input_pdf = fitz.open(filepath)
     num_pages = input_pdf.page_count
-    print(f"총 페이지 수: {num_pages}")
+    print(f"Total page count: {num_pages}")
 
     page_metadata = dict()
     for page in range(num_pages):
@@ -441,26 +434,26 @@ def split_pdf(state: GraphState):
         page_metadata[page] = metadata
 
     ret = []
-    # PDF 분할 작업 시작
+    # Start the PDF splitting process
     for start_page in range(0, num_pages, batch_size):
-        # 배치의 마지막 페이지 계산 (전체 페이지 수를 초과하지 않도록)
+        # Calculate the last page of the batch (to avoid exceeding the total page count)
         end_page = min(start_page + batch_size, num_pages) - 1
 
-        # 분할된 PDF 파일명 생성
+        # Create the name of the split PDF file
         input_file_basename = os.path.splitext(filepath)[0]
         output_file = f"{input_file_basename}_{start_page:04d}_{end_page:04d}.pdf"
-        print(f"분할 PDF 생성: {output_file}")
+        print(f"Split PDF created: {output_file}")
 
-        # 새로운 PDF 파일 생성 및 페이지 삽입
+        # Create a new PDF file and insert pages
         with pymupdf.open() as output_pdf:
             output_pdf.insert_pdf(input_pdf, from_page=start_page, to_page=end_page)
             output_pdf.save(output_file)
             ret.append(output_file)
 
-    # 원본 PDF 파일 닫기
+    # Close the original PDF file
     input_pdf.close()
 
-    # 분할된 PDF 파일 경로 목록을 포함한 GraphState 객체 반환
+    # Return the GraphState object containing the list of split PDF file paths
     return GraphState(split_filepaths=ret, page_metadata=page_metadata)
 
 
@@ -484,22 +477,22 @@ def merge_image(state: GraphState):
 
 
 def analyze_layout(state: GraphState):
-    # 분할된 PDF 파일 목록을 가져옵니다.
+    # Get the list of split PDF file paths
     split_files = state["split_filepaths"]
 
-    # DocumentParser 객체를 생성합니다. API 키는 환경 변수에서 가져옵니다.
+    # Create a DocumentParser object. The API key is retrieved from the environment variable.
     analyzer = DocumentParser(os.environ.get("UPSTAGE_API_KEY"))
 
-    # 분석된 파일들의 경로를 저장할 리스트를 초기화합니다.
+    # Initialize a list to store the paths of analyzed files
     analyzed_files = []
 
-    # 각 분할된 PDF 파일에 대해 레이아웃 분석을 수행합니다.
+    # Analyze the layout of each split PDF file
     for file in split_files:
-        # 레이아웃 분석을 실행하고 결과 파일 경로를 리스트에 추가합니다.
+        # Execute the layout analysis and add the result file path to the list
         analyzed_files.append(analyzer.execute(file))
 
-    # 분석된 파일 경로들을 정렬하여 새로운 GraphState 객체를 생성하고 반환합니다.
-    # 정렬은 파일들의 순서를 유지하기 위해 수행됩니다.
+    # Sort the analyzed file paths and create a new GraphState object to return them
+    # Sorting is performed to maintain the order of the files
     return GraphState(analyzed_files=sorted(analyzed_files))
 
 
@@ -516,76 +509,76 @@ def add_analyzed_layout(state: GraphState):
 
 
 def extract_page_elements(state: GraphState):
-    # 분석된 JSON 파일 목록을 가져옵니다.
+    # Get the list of analyzed JSON file paths
     json_files = state["analyzed_files"]
     file_type = state["filetype"]
-    # 페이지별 요소를 저장할 딕셔너리를 초기화합니다.
+    # Initialize a dictionary to store page-wise elements
     page_elements = dict()
 
-    # 전체 문서에서 고유한 요소 ID를 부여하기 위한 카운터입니다.
+    # Initialize a counter to assign unique element IDs
     element_id = 0
 
-    # 각 JSON 파일을 순회하며 처리합니다.
+    # Iterate through each JSON file
     for i, json_file in enumerate(json_files):
         if file_type == "image":
             pass
         else:
-            # 파일명에서 시작 페이지 번호를 추출합니다.
+            # Extract the start page number from the file name
             start_page, _ = extract_start_end_page(json_file)
 
-        # JSON 파일을 열어 데이터를 로드합니다.
+        # Load the JSON file
         with open(json_file, "r") as f:
             data = json.load(f)
 
         # JSON 데이터의 각 요소를 처리합니다.
         for element in data["elements"]:
-            # 원본 페이지 번호를 정수로 변환합니다.
+            # Convert the original page number to an integer
             if file_type == "image":
                 relative_page = i
             else:
                 original_page = int(element["page"])
-                # 전체 문서 기준의 상대적 페이지 번호를 계산합니다.
+                # Calculate the relative page number based on the entire document
                 relative_page = start_page + original_page - 1
-            # 해당 페이지의 요소 리스트가 없으면 새로 생성합니다.
+            # If the list of elements for the page does not exist, create a new one
             if relative_page not in page_elements:
                 page_elements[relative_page] = []
 
-            # 요소에 고유 ID를 부여합니다.
+            # Assign a unique ID to the element
             element["id"] = element_id
             element_id += 1
 
-            # 요소의 페이지 번호를 상대적 페이지 번호로 업데이트합니다.
+            # Update the element's page number to the relative page number
             element["page"] = relative_page
-            # 요소를 해당 페이지의 리스트에 추가합니다.
+            # Add the element to the list of elements for the page
             page_elements[relative_page].append(element)
 
-    # 추출된 페이지별 요소 정보로 새로운 GraphState 객체를 생성하여 반환합니다.
+    # Create a new GraphState object with the extracted page-wise element information
     return GraphState(page_elements=page_elements)
 
 
 def extract_tag_elements_per_page(state: GraphState):
-    # GraphState 객체에서 페이지 요소들을 가져옵니다.
+    # Get the page-wise elements from the GraphState object
     page_elements = state["page_elements"]
 
-    # 파싱된 페이지 요소들을 저장할 새로운 딕셔너리를 생성합니다.
+    # Create a new dictionary to store the parsed page elements
     parsed_page_elements = dict()
 
-    # 각 페이지와 해당 페이지의 요소들을 순회합니다.
+    # Iterate through each page and its elements
     for key, page_element in page_elements.items():
-        # 이미지, 테이블, 텍스트 요소들을 저장할 리스트를 초기화합니다.
+        # Initialize lists to store image, table, text elements
         image_elements = []
         table_elements = []
         text_elements = []
         chart_elements = []
         equation_elements = []
         index_elements = []
-        # 페이지의 각 요소를 순회하며 카테고리별로 분류합니다.
+        # Iterate through each element in the page
         for element in page_element:
             if element["category"] == "figure":
-                # 이미지 요소인 경우 image_elements 리스트에 추가합니다.
+                # If the element is an image, add it to the image_elements list
                 image_elements.append(element)
             elif element["category"] == "table":
-                # 테이블 요소인 경우 table_elements 리스트에 추가합니다.
+                # If the element is a table, add it to the table_elements list
                 table_elements.append(element)
             elif element["category"] == "chart":
                 chart_elements.append(element)
@@ -594,10 +587,10 @@ def extract_tag_elements_per_page(state: GraphState):
             elif element["category"] == "index":
                 index_elements.append(element)
             else:
-                # 그 외의 요소는 모두 텍스트 요소로 간주하여 text_elements 리스트에 추가합니다.
+                # If the element is not an image, table, chart, equation, or index, consider it a text element
                 text_elements.append(element)
 
-        # 분류된 요소들을 페이지 키와 함께 새로운 딕셔너리에 저장합니다.
+        # Store the categorized elements with the page key in a new dictionary
         parsed_page_elements[key] = {
             "image_elements": image_elements,
             "table_elements": table_elements,
@@ -605,10 +598,10 @@ def extract_tag_elements_per_page(state: GraphState):
             "chart_elements": chart_elements,
             "equation_elements": equation_elements,
             "index_elements": index_elements,
-            "elements": page_element,  # 원본 페이지 요소도 함께 저장합니다.
+            "elements": page_element,  # Store the original page elements as well
         }
 
-    # 파싱된 페이지 요소들을 포함한 새로운 GraphState 객체를 반환합니다.
+    # Return a new GraphState object containing the parsed page elements
     return GraphState(page_elements=parsed_page_elements)
 
 
@@ -618,87 +611,87 @@ def extract_page_numbers(state: GraphState):
 
 def crop_image(state: GraphState):
     """
-    PDF 파일에서 이미지를 추출하고 크롭하는 함수
+    Extract and crop images from a PDF file
 
-    :param state: GraphState 객체
-    :return: 크롭된 이미지 정보가 포함된 GraphState 객체
+    :param state: GraphState object
+    :return: GraphState object containing the cropped image information
     """
-    files = state["filepath"]  # 파일 경로
+    files = state["filepath"]  # File path
     file_type = state["filetype"]
-    page_numbers = state["page_numbers"]  # 처리할 페이지 번호 목록
+    page_numbers = state["page_numbers"]  # List of page numbers to process
     if file_type == "image":
-        output_folder = os.path.splitext(files[0])[0]  # 출력 폴더 경로 설정
+        output_folder = os.path.splitext(files[0])[0]  # Set the output folder path
     else:
-        output_folder = os.path.splitext(files)[0]  # 출력 폴더 경로 설정
-    os.makedirs(output_folder, exist_ok=True)  # 출력 폴더 생성
+        output_folder = os.path.splitext(files)[0]  # Set the output folder path
+    os.makedirs(output_folder, exist_ok=True)  # Create the output folder
 
-    cropped_images = dict()  # 크롭된 이미지 정보를 저장할 딕셔너리
+    cropped_images = dict()  # Dictionary to store the cropped image information
     for page_num in page_numbers:
         if file_type == "pdf":
             image_file = ImageCropper.pdf_to_image(
                 files, page_num
-            )  # PDF 페이지를 이미지로 변환
+            )  # Convert the PDF page to an image
         elif file_type == "image":
             image_file = ImageCropper.load_image_without_rotation(files[page_num])
 
         for element in state["page_elements"][page_num]["image_elements"]:
             if element["category"] == "figure":
-                # 이미지 요소의 좌표를 정규화
+                # Normalize the coordinates of the image element
                 normalized_coordinates = ImageCropper.normalize_coordinates(
                     element["coordinates"]
                 )
 
-                # 크롭된 이미지 저장 경로 설정
+                # Set the path to save the cropped image
                 output_file = os.path.join(output_folder, f"{element['id']}.png")
-                # 이미지 크롭 및 저장
+                # Crop the image and save it
                 ImageCropper.crop_image(image_file, normalized_coordinates, output_file)
                 cropped_images[element["id"]] = output_file
                 print(f"page:{page_num}, id:{element['id']}, path: {output_file}")
     return GraphState(
         images=cropped_images
-    )  # 크롭된 이미지 정보를 포함한 GraphState 반환
+    )  # Return a new GraphState object containing the cropped image information
 
 
 def crop_table(state: GraphState):
     """
-    PDF 파일에서 표를 추출하고 크롭하는 함수
+    Extract and crop tables from a PDF file
 
-    :param state: GraphState 객체
-    :return: 크롭된 표 이미지 정보가 포함된 GraphState 객체
+    :param state: GraphState object
+    :return: GraphState object containing the cropped table image information
     """
-    files = state["filepath"]  # PDF 파일 경로
+    files = state["filepath"]  # PDF file path
     file_type = state["filetype"]
-    page_numbers = state["page_numbers"]  # 처리할 페이지 번호 목록
+    page_numbers = state["page_numbers"]  # List of page numbers to process
     if file_type == "image":
-        output_folder = os.path.splitext(files[0])[0]  # 출력 폴더 경로 설정
+        output_folder = os.path.splitext(files[0])[0]  # Set the output folder path
     else:
-        output_folder = os.path.splitext(files)[0]  # 출력 폴더 경로 설정
-    os.makedirs(output_folder, exist_ok=True)  # 출력 폴더 생성
+        output_folder = os.path.splitext(files)[0]  # Set the output folder path
+    os.makedirs(output_folder, exist_ok=True)  # Create the output folder
 
-    cropped_images = dict()  # 크롭된 표 이미지 정보를 저장할 딕셔너리
+    cropped_images = dict()  # Dictionary to store the cropped table image information
     for page_num in page_numbers:
         if file_type == "pdf":
             image_file = ImageCropper.pdf_to_image(
                 files, page_num
-            )  # PDF 페이지를 이미지로 변환
+            )  # Convert the PDF page to an image
         elif file_type == "image":
             image_file = ImageCropper.load_image_without_rotation(files[page_num])
         for element in state["page_elements"][page_num]["table_elements"]:
             if element["category"] == "table":
-                # 표 요소의 좌표를 정규화
+                # Normalize the coordinates of the table element
                 normalized_coordinates = ImageCropper.normalize_coordinates(
                     element["coordinates"],
                 )
 
-                # 크롭된 표 이미지 저장 경로 설정
+                # Set the path to save the cropped table image
                 output_file = os.path.join(output_folder, f"{element['id']}.png")
-                # 표 이미지 크롭 및 저장
+                # Crop the table image and save it
                 ImageCropper.crop_image(image_file, normalized_coordinates, output_file)
                 cropped_images[element["id"]] = output_file
                 print(f"page:{page_num}, id:{element['id']}, path: {output_file}")
     return GraphState(
         tables=cropped_images
-    )  # 크롭된 표 이미지 정보를 포함한 GraphState 반환
+    )  # Return a new GraphState object containing the cropped table image information
 
 
 def extract_page_text(state: GraphState):
@@ -749,10 +742,10 @@ def extract_page_text(state: GraphState):
 
 
 def extract_doc_metadata(state: GraphState):
-    # state에서 텍스트 데이터를 가져옵니다.
+    # Extract the text data from the GraphState object
     texts = state["texts"]
 
-    # texts.items()를 페이지 번호(키)를 기준으로 오름차순 정렬합니다.
+    # Sort the text data by page number (key) in ascending order
     sorted_texts = sorted(texts.items(), key=lambda x: x[0])
 
     inputs = [{"context": Document(page_content=sorted_texts[0][1])}]
@@ -764,37 +757,37 @@ def extract_doc_metadata(state: GraphState):
 
 
 def translate_text(state: GraphState):
-    # state에서 텍스트 데이터를 가져옵니다.
+    # Extract the text data from the GraphState object
     page_numbers = state["page_numbers"]
     texts = state["texts"]
     translate_lang = state["translate_lang"]
 
-    # 번역된 텍스트를 저장할 딕셔너리를 초기화합니다.
+    # Initialize a dictionary to store the translated text
     translated_texts = dict()
 
-    # texts.items()를 페이지 번호(키)를 기준으로 오름차순 정렬합니다.
+    # Sort the text data by page number (key) in ascending order
     sorted_texts = sorted(texts.items(), key=lambda x: x[0])
 
-    # 각 페이지의 텍스트를 Document 객체로 변환하여 입력 리스트를 생성합니다.
+    # Convert each page's text to a Document object and create an input list
     inputs = [
         {"context": [Document(page_content=text)], "output_language": translate_lang}
         for page_num, text in sorted_texts
     ]
 
-    # text_summary_chain을 사용하여 일괄 처리로 요약을 생성합니다.
+    # Use text_tranlate_chain to generate translations in batch mode
     text_tranlate_chain = create_text_translate_chain()
     translation_results = text_tranlate_chain.batch(inputs)
 
-    # translation_results를 순서대로 페이지 번호와 매핑
+    # Map the translation results to the page numbers in order
     for page_num, translation in zip(page_numbers, translation_results):
         translated_texts[page_num] = translation
 
-    # 요약된 텍스트를 포함한 새로운 GraphState 객체를 반환합니다.
+    # Return a new GraphState object containing the translated text
     return GraphState(translated_texts=translated_texts)
 
 
 def create_text_summary(state: GraphState):
-    # state에서 텍스트 데이터를 가져옵니다.
+    # Extract the text data from the GraphState object
     page_numbers = state["page_numbers"]
     translate_toggle = state["translate_toggle"]
     translate_lang = state["translate_lang"]
@@ -803,122 +796,122 @@ def create_text_summary(state: GraphState):
     else:
         texts = state["texts"]
 
-    # 요약된 텍스트를 저장할 딕셔너리를 초기화합니다.
+    # Initialize a dictionary to store the summarized text
     text_summary = dict()
 
-    # texts.items()를 페이지 번호(키)를 기준으로 오름차순 정렬합니다.
+    # Sort the text data by page number (key) in ascending order
     sorted_texts = sorted(texts.items(), key=lambda x: x[0])
 
-    # 각 페이지의 텍스트를 Document 객체로 변환하여 입력 리스트를 생성합니다.
+    # Convert each page's text to a Document object and create an input list
     inputs = [
         {"context": [Document(page_content=text)], "output_language": translate_lang}
         for page_num, text in sorted_texts
     ]
 
-    # text_summary_chain을 사용하여 일괄 처리로 요약을 생성합니다.
+    # Use text_summary_chain to generate summaries in batch mode
     text_summary_chain = create_text_summary_chain()
     summaries = text_summary_chain.batch(inputs)
 
-    # translation_results를 순서대로 페이지 번호와 매핑
+    # Map the summaries to the page numbers in order
     for page_num, translation in zip(page_numbers, summaries):
         text_summary[page_num] = translation
 
-    # 요약된 텍스트를 포함한 새로운 GraphState 객체를 반환합니다.
+    # Return a new GraphState object containing the summarized text
     return GraphState(texts_summary=text_summary)
 
 
 def create_image_summary_data_batches(state: GraphState):
-    # 이미지 요약을 위한 데이터 배치를 생성하는 함수
+    # Function to create data batches for image summaries
     data_batches = []
 
-    # 페이지 번호를 오름차순으로 정렬
+    # Sort the page numbers in ascending order
     page_numbers = sorted(list(state["page_elements"].keys()))
 
     for page_num in page_numbers:
-        # 각 페이지의 요약된 텍스트를 가져옴
+        # Get the summarized text for each page
         text = state["texts_summary"][page_num]
-        # 해당 페이지의 모든 이미지 요소에 대해 반복
+        # Iterate through all image elements for the page
         for image_element in state["page_elements"][page_num]["image_elements"]:
-            # 이미지 ID를 정수로 변환
+            # Convert the image ID to an integer
             image_id = int(image_element["id"])
 
-            # 데이터 배치에 이미지 정보, 관련 텍스트, 페이지 번호, ID를 추가
+            # Add the image information, related text, page number, and ID to the data batch
             data_batches.append(
                 {
-                    "image": state["images"][image_id],  # 이미지 파일 경로
-                    "text": text,  # 관련 텍스트 요약
-                    "page": page_num,  # 페이지 번호
-                    "id": image_id,  # 이미지 ID
-                    "lang": state["translate_lang"],  # 언어
+                    "image": state["images"][image_id],  # Image file path
+                    "text": text,  # Related text summary
+                    "page": page_num,  # Page number
+                    "id": image_id,  # Image ID
+                    "lang": state["translate_lang"],  # Language
                 }
             )
-    # 생성된 데이터 배치를 GraphState 객체에 담아 반환
+    # Return a new GraphState object containing the created data batches
     return GraphState(image_summary_data_batches=data_batches)
 
 
 def create_table_summary_data_batches(state: GraphState):
-    # 테이블 요약을 위한 데이터 배치를 생성하는 함수
+    # Function to create data batches for table summaries
     data_batches = []
 
-    # 페이지 번호를 오름차순으로 정렬
+    # Sort the page numbers in ascending order
     page_numbers = sorted(list(state["page_elements"].keys()))
 
     for page_num in page_numbers:
-        # 각 페이지의 요약된 텍스트를 가져옴
+        # Get the summarized text for each page
         text = state["texts_summary"][page_num]
-        # 해당 페이지의 모든 테이블 요소에 대해 반복
+        # Iterate through all table elements for the page
         for image_element in state["page_elements"][page_num]["table_elements"]:
-            # 테이블 ID를 정수로 변환
+            # Convert the table ID to an integer
             image_id = int(image_element["id"])
 
-            # 데이터 배치에 테이블 정보, 관련 텍스트, 페이지 번호, ID를 추가
+            # Add the table information, related text, page number, and ID to the data batch
             data_batches.append(
                 {
-                    "table": state["tables"][image_id],  # 테이블 데이터
-                    "text": text,  # 관련 텍스트 요약
-                    "page": page_num,  # 페이지 번호
-                    "id": image_id,  # 테이블 ID
-                    "lang": state["translate_lang"],  # 언어
+                    "table": state["tables"][image_id],  # Table data
+                    "text": text,  # Related text summary
+                    "page": page_num,  # Page number
+                    "id": image_id,  # Table ID
+                    "lang": state["translate_lang"],  # Language
                 }
             )
-    # 생성된 데이터 배치를 GraphState 객체에 담아 반환
+    # Return a new GraphState object containing the created data batches
     return GraphState(table_summary_data_batches=data_batches)
 
 
 def create_image_summary(state: GraphState):
-    # 이미지 요약 추출
-    # extract_image_summary 함수를 호출하여 이미지 요약 생성
+    # Extract image summaries
+    # Call the extract_image_summary function to generate image summaries
     image_summaries = extract_image_summary.invoke(state["image_summary_data_batches"])
 
-    # 이미지 요약 결과를 저장할 딕셔너리 초기화
+    # Initialize a dictionary to store the image summaries
     image_summary_output = dict()
 
-    # 각 데이터 배치와 이미지 요약을 순회하며 처리
+    # Iterate through each data batch and image summary
     for data_batch, image_summary in zip(
         state["image_summary_data_batches"], image_summaries
     ):
-        # 데이터 배치의 ID를 키로 사용하여 이미지 요약 저장
+        # Use the ID of the data batch as the key to store the image summary
         image_summary_output[data_batch["id"]] = image_summary
 
-    # 이미지 요약 결과를 포함한 새로운 GraphState 객체 반환
+    # Return a new GraphState object containing the image summaries
     return GraphState(images_summary=image_summary_output)
 
 
 def create_table_summary(state: GraphState):
-    # 테이블 요약 추출
+    # Extract table summaries
     table_summaries = extract_table_summary.invoke(state["table_summary_data_batches"])
 
-    # 테이블 요약 결과를 저장할 딕셔너리 초기화
+    # Initialize a dictionary to store the table summaries
     table_summary_output = dict()
 
-    # 각 데이터 배치와 테이블 요약을 순회하며 처리
+    # Iterate through each data batch and table summary
     for data_batch, table_summary in zip(
         state["table_summary_data_batches"], table_summaries
     ):
-        # 데이터 배치의 ID를 키로 사용하여 테이블 요약 저장
+        # Use the ID of the data batch as the key to store the table summary
         table_summary_output[data_batch["id"]] = table_summary
 
-    # 테이블 요약 결과를 포함한 새로운 GraphState 객체 반환
+    # Return a new GraphState object containing the table summaries
     return GraphState(tables_summary=table_summary_output)
 
 
@@ -955,7 +948,6 @@ def graph_document_ai(translate_toggle: bool):
     )
     workflow.add_node("create_image_summary", create_image_summary)
     workflow.add_node("create_table_summary", create_table_summary)
-    # workflow.add_node("clean_up", clean_up)
 
     workflow.add_conditional_edges(
         START,
@@ -987,7 +979,6 @@ def graph_document_ai(translate_toggle: bool):
     workflow.add_edge("create_table_summary_data_batches", "create_image_summary")
     workflow.add_edge("create_image_summary", "create_table_summary")
     workflow.add_edge("create_table_summary", END)
-    # workflow.add_edge("clean_up", END)
 
     graph = workflow.compile()
 

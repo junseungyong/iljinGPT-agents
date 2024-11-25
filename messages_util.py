@@ -8,18 +8,18 @@ from langchain_core.messages import BaseMessage
 
 def stream_response(response, return_output=False):
     """
-    AI 모델로부터의 응답을 스트리밍하여 각 청크를 처리하면서 출력합니다.
+    Print the response from the AI model, streaming each chunk as it is processed.
 
-    이 함수는 `response` 이터러블의 각 항목을 반복 처리합니다. 항목이 `AIMessageChunk`의 인스턴스인 경우,
-    청크의 내용을 추출하여 출력합니다. 항목이 문자열인 경우, 문자열을 직접 출력합니다. 선택적으로, 함수는
-    모든 응답 청크의 연결된 문자열을 반환할 수 있습니다.
+    This function iterates through each item in the `response` iterable. If the item is an instance of `AIMessageChunk`,
+    it extracts the content of the chunk and prints it. If the item is a string, it prints the string directly.
+    Optionally, the function can return a concatenated string of all response chunks.
 
-    매개변수:
-    - response (iterable): `AIMessageChunk` 객체 또는 문자열일 수 있는 응답 청크의 이터러블입니다.
-    - return_output (bool, optional): True인 경우, 함수는 연결된 응답 문자열을 문자열로 반환합니다. 기본값은 False입니다.
+    Parameters:
+    - response (iterable): An iterable of response chunks that can be an instance of `AIMessageChunk` or a string.
+    - return_output (bool, optional): If True, the function returns a concatenated string of all response chunks. The default is False.
 
-    반환값:
-    - str: `return_output`이 True인 경우, 연결된 응답 문자열입니다. 그렇지 않으면, 아무것도 반환되지 않습니다.
+    Returns:
+    - str: If `return_output` is True, the function returns a concatenated string of all response chunks. Otherwise, it returns None.
     """
     answer = ""
     for token in response:
@@ -33,37 +33,37 @@ def stream_response(response, return_output=False):
         return answer
 
 
-# 도구 호출 시 실행되는 콜백 함수입니다.
+# Callback function that is executed when a tool is called.
 def tool_callback(tool) -> None:
-    print("[도구 호출]")
-    print(f"Tool: {tool.get('tool')}")  # 사용된 도구의 이름을 출력합니다.
-    if tool_input := tool.get("tool_input"):  # 도구에 입력된 값이 있다면
+    print("[Tool Call]")
+    print(f"Tool: {tool.get('tool')}")  # Print the name of the tool used.
+    if tool_input := tool.get("tool_input"):  # If there is an input value for the tool
         for k, v in tool_input.items():
-            print(f"{k}: {v}")  # 입력값의 키와 값을 출력합니다.
-    print(f"Log: {tool.get('log')}")  # 도구 실행 로그를 출력합니다.
+            print(f"{k}: {v}")  # Print the key and value of the input value.
+    print(f"Log: {tool.get('log')}")  # Print the log of the tool execution.
 
 
-# 관찰 결과를 출력하는 콜백 함수입니다.
+# Callback function that prints the observation.
 def observation_callback(observation) -> None:
-    print("[관찰 내용]")
-    print(f"Observation: {observation.get('observation')}")  # 관찰 내용을 출력합니다.
+    print("[Observation]")
+    print(f"Observation: {observation.get('observation')}")  # Print the observation.
 
 
-# 최종 결과를 출력하는 콜백 함수입니다.
+# Callback function that prints the result.
 def result_callback(result: str) -> None:
-    print("[최종 답변]")
-    print(result)  # 최종 답변을 출력합니다.
+    print("[Result]")
+    print(result)  # Print the result.
 
 
 @dataclass
 class AgentCallbacks:
     """
-    에이전트 콜백 함수들을 포함하는 데이터 클래스입니다.
+    A data class that contains the agent callback functions.
 
     Attributes:
-        tool_callback (Callable[[Dict[str, Any]], None]): 도구 사용 시 호출되는 콜백 함수
-        observation_callback (Callable[[Dict[str, Any]], None]): 관찰 결과 처리 시 호출되는 콜백 함수
-        result_callback (Callable[[str], None]): 최종 결과 처리 시 호출되는 콜백 함수
+        tool_callback (Callable[[Dict[str, Any]], None]): Callback function called when a tool is used
+        observation_callback (Callable[[Dict[str, Any]], None]): Callback function called when an observation is made
+        result_callback (Callable[[str], None]): Callback function called when the result is returned
     """
 
     tool_callback: Callable[[Dict[str, Any]], None] = tool_callback
@@ -73,25 +73,25 @@ class AgentCallbacks:
 
 class AgentStreamParser:
     """
-    에이전트의 스트림 출력을 파싱하고 처리하는 클래스입니다.
+    A class that parses and processes the stream output of an agent.
     """
 
     def __init__(self, callbacks: AgentCallbacks = AgentCallbacks()):
         """
-        AgentStreamParser 객체를 초기화합니다.
+        Initialize the AgentStreamParser object.
 
         Args:
-            callbacks (AgentCallbacks, optional): 파싱 과정에서 사용할 콜백 함수들. 기본값은 AgentCallbacks()입니다.
+            callbacks (AgentCallbacks, optional): Callback functions used during the parsing process. Defaults to AgentCallbacks().
         """
         self.callbacks = callbacks
         self.output = None
 
     def process_agent_steps(self, step: Dict[str, Any]) -> None:
         """
-        에이전트의 단계를 처리합니다.
+        Process the agent steps.
 
         Args:
-            step (Dict[str, Any]): 처리할 에이전트 단계 정보
+            step (Dict[str, Any]): The agent step information to be processed
         """
         if "actions" in step:
             self._process_actions(step["actions"])
@@ -102,10 +102,10 @@ class AgentStreamParser:
 
     def _process_actions(self, actions: List[Any]) -> None:
         """
-        에이전트의 액션들을 처리합니다.
+        Process the agent actions.
 
         Args:
-            actions (List[Any]): 처리할 액션 리스트
+            actions (List[Any]): The list of actions to be processed
         """
         for action in actions:
             if isinstance(action, (AgentAction, ToolAgentAction)) and hasattr(
@@ -115,10 +115,10 @@ class AgentStreamParser:
 
     def _process_tool_call(self, action: Any) -> None:
         """
-        도구 호출을 처리합니다.
+        Process the tool call.
 
         Args:
-            action (Any): 처리할 도구 호출 액션
+            action (Any): The tool call action to be processed
         """
         tool_action = {
             "tool": getattr(action, "tool", None),
@@ -129,10 +129,10 @@ class AgentStreamParser:
 
     def _process_observations(self, observations: List[Any]) -> None:
         """
-        관찰 결과들을 처리합니다.
+        Process the observations.
 
         Args:
-            observations (List[Any]): 처리할 관찰 결과 리스트
+            observations (List[Any]): The list of observations to be processed
         """
         for observation in observations:
             observation_dict = {}
@@ -145,10 +145,10 @@ class AgentStreamParser:
 
     def _process_result(self, result: str) -> None:
         """
-        최종 결과를 처리합니다.
+        Process the result.
 
         Args:
-            result (str): 처리할 최종 결과
+            result (str): The final result to be processed
         """
         self.callbacks.result_callback(result)
         self.output = result
@@ -159,20 +159,20 @@ def pretty_print_messages(messages: list[BaseMessage]):
         message.pretty_print()
 
 
-# 각 깊이 수준에 대해 미리 정의된 색상 (ANSI 이스케이프 코드 사용)
+# Predefined colors for each depth level (using ANSI escape codes)
 depth_colors = {
-    1: "\033[96m",  # 밝은 청록색 (눈에 잘 띄는 첫 계층)
-    2: "\033[93m",  # 노란색 (두 번째 계층)
-    3: "\033[94m",  # 밝은 초록색 (세 번째 계층)
-    4: "\033[95m",  # 보라색 (네 번째 계층)
-    5: "\033[92m",  # 밝은 파란색 (다섯 번째 계층)
-    "default": "\033[96m",  # 기본값은 밝은 청록색으로
-    "reset": "\033[0m",  # 기본 색상으로 재설정
+    1: "\033[96m",  # Light cyan (visually appealing first layer)
+    2: "\033[93m",  # Yellow (second layer)
+    3: "\033[94m",  # Light green (third layer)
+    4: "\033[95m",  # Purple (fourth layer)
+    5: "\033[92m",  # Light blue (fifth layer)
+    "default": "\033[96m",  # Default is light cyan
+    "reset": "\033[0m",  # Reset to default color
 }
 
 
 def is_terminal_dict(data):
-    """말단 딕셔너리인지 확인합니다."""
+    """Check if the data is a terminal dictionary."""
     if not isinstance(data, dict):
         return False
     for value in data.values():
@@ -182,7 +182,7 @@ def is_terminal_dict(data):
 
 
 def format_terminal_dict(data):
-    """말단 딕셔너리를 포맷팅합니다."""
+    """Format the terminal dictionary."""
     items = []
     for key, value in data.items():
         if isinstance(value, str):
@@ -194,7 +194,7 @@ def format_terminal_dict(data):
 
 def _display_message_tree(data, indent=0, node=None, is_root=False):
     """
-    JSON 객체의 트리 구조를 타입 정보 없이 출력합니다.
+    Print the tree structure of a JSON object without type information.
     """
     spacing = " " * indent * 4
     color = depth_colors.get(indent + 1, depth_colors["default"])
@@ -238,7 +238,7 @@ def _display_message_tree(data, indent=0, node=None, is_root=False):
 
 def display_message_tree(message):
     """
-    메시지 트리를 표시하는 주 함수입니다.
+    The main function to display the message tree.
     """
     if isinstance(message, BaseMessage):
         _display_message_tree(message.__dict__, is_root=True)

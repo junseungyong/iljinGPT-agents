@@ -2,7 +2,9 @@ from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.retrievers.ensemble import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
+from langchain_community.document_loaders import PDFPlumberLoader
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from constants import EMBEDDING_MODEL
 
@@ -35,3 +37,31 @@ def create_ensemble_retriever(documents):
     )
 
     return ensemble_retriever
+
+
+def create_retriever_from_PDF(file):
+    # Store the uploaded file in the cache directory.
+    file_content = file.read()
+    file_path = f"./.cache/files/{file.name}"
+    with open(file_path, "wb") as f:
+        f.write(file_content)
+
+    # Step 1: Load Documents
+    loader = PDFPlumberLoader(file_path)
+    docs = loader.load()
+
+    # Step 2: Split Documents
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=50)
+    split_documents = text_splitter.split_documents(docs)
+
+    # Step 3: Create Embeddings
+    embeddings = OpenAIEmbeddings()
+
+    # Step 4: Create DB and Save
+    # Create a vector store.
+    vectorstore = FAISS.from_documents(documents=split_documents, embedding=embeddings)
+
+    # Step 5: Create Retriever
+    # Search and create information included in the document.
+    retriever = vectorstore.as_retriever()
+    return retriever

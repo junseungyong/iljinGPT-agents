@@ -6,10 +6,11 @@ from langchain_ollama import ChatOllama
 
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 
-from tool_utils import SEARCH_TOOLS
+from tool_utils import SEARCH_TOOLS, SEARCH_TOOLS_OLLAMA
 from chat_utils import get_session_history
 
 
+# Create GPT agent
 def create_gpt_agent():
     tools = SEARCH_TOOLS
 
@@ -32,14 +33,15 @@ def create_gpt_agent():
     return gpt_agent
 
 
+# Create Ollama agent
 def create_ollama_agent():
-    tools = SEARCH_TOOLS
+    tools = SEARCH_TOOLS_OLLAMA
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                load_prompt("prompts/agentic-rag-prompt.yaml").template,
+                load_prompt("prompts/agentic-ollama-prompt.yaml").template,
             ),
             ("placeholder", "{chat_history}"),
             ("human", "{input}"),
@@ -54,12 +56,12 @@ def create_ollama_agent():
     return ollama_agent
 
 
+# Create agent with chat history
 def create_agent_with_chat_history(model):
     if model == "***ChatGPT***":
         agent = create_gpt_agent()
     else:
-        agent = create_gpt_agent()
-        # agent = create_ollama_agent()
+        agent = create_ollama_agent()
 
     agent_executor = AgentExecutor(
         agent=agent,
@@ -70,11 +72,11 @@ def create_agent_with_chat_history(model):
 
     agent_with_chat_history = RunnableWithMessageHistory(
         agent_executor,
-        # 대화 session_id
+        # Get session history
         get_session_history,
-        # 프롬프트의 질문이 입력되는 key: "input"
+        # Key for input prompt: "input"
         input_messages_key="input",
-        # 프롬프트의 메시지가 입력되는 key: "chat_history"
+        # Key for history prompt: "chat_history"
         history_messages_key="chat_history",
     )
 

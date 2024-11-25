@@ -20,10 +20,9 @@ class RelatedQuestions(BaseModel):
 
 
 def format_searched_tavily(search_results):
-    # search_results에서 'results' 키의 값을 가져옵니다
+    # Get the value of the 'results' key from search_results
     docs = search_results.get("results", [])
 
-    # Document 객체 리스트 생성 (score >= 0.8인 문서만)
     return [
         Document(
             page_content=doc["content"],
@@ -103,3 +102,4 @@ def create_related_info(query: str, context: list[Document]) -> list[str]:
 
 
 SEARCH_TOOLS = [search_tavily, create_related_info]
+SEARCH_TOOLS_OLLAMA = [search_tavily]

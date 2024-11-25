@@ -1,20 +1,25 @@
 import os
 from langchain_community.document_loaders import PyMuPDFLoader
 
+# Root directory
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 
+# Database path
 DB_PATH = f"{ROOT_DIR}/DB"
 
+# Number of ingestion threads
 INGEST_THREADS = os.cpu_count() or 8
 
+# Document loader map
 DOCUMENT_MAP = {
     ".pdf": PyMuPDFLoader,
 }
 
+# Progress message for graph nodes
 PROGRESS_MESSAGE_GRAPH_NODES = {
     "split_pdf": "Processing the document..",
     "merge_image": "Processing the document..",
-    "analyze_layout": "Analyzing layout..",
+    "add_analyzed_layout": "Analyzing layout..",
     "extract_page_metadata": "Extracting page metadata..",
     "extract_page_elements": "Extracting page elements..",
     "extract_tag_elements_per_page": "Extracting tag elements..",
@@ -31,7 +36,8 @@ PROGRESS_MESSAGE_GRAPH_NODES = {
     "clean_up": "Cleaning up..",
 }
 
-
+# Output directory
 OUTPUT_DIR = ".cache/output"
 
+# Embedding model
 EMBEDDING_MODEL = "intfloat/multilingual-e5-large-instruct"

@@ -7,20 +7,20 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_models import ChatOllama
 
-# session_id 를 저장할 딕셔너리 생성
+# Create dictionary to store session_id
 store = {}
 
 
-# session_id 를 기반으로 세션 기록을 가져오는 함수
+# Get session history based on session_id
 def get_session_history(session_ids):
-    if session_ids not in store:  # session_id 가 store에 없는 경우
-        # 새로운 ChatMessageHistory 객체를 생성하여 store에 저장
+    if session_ids not in store:  # If session_id is not in store
+        # Create new ChatMessageHistory object and store it in store
         store[session_ids] = ChatMessageHistory()
-    return store[session_ids]  # 해당 세션 ID에 대한 세션 기록 반환
+    return store[session_ids]  # Return session history for the corresponding session ID
 
 
 def create_chain():
-    # 프롬프트 정의
+    # Define prompt
     prompt = ChatPromptTemplate.from_messages(
         [
             (
@@ -28,13 +28,13 @@ def create_chain():
                 "Based on the following information, please provide a concise and accurate answer to the question."
                 "If the information is not sufficient to answer the question, say so.",
             ),
-            # 대화기록용 key 인 chat_history 는 가급적 변경 없이 사용하세요!
+            # Use chat_history as key for conversation history
             MessagesPlaceholder(variable_name="chat_history"),
             (
                 "human",
                 "\n\nHere is the question:\n ------- \n{question}\n ------- \n"
                 "\n\nHere is the context:\n ------- \n{context}\n ------- \n",
-            ),  # 사용자 입력을 변수로 사용
+            ),  # Use user input as variable
         ]
     )
 
@@ -44,9 +44,9 @@ def create_chain():
 
     chain_with_history = RunnableWithMessageHistory(
         chain,
-        get_session_history,  # 세션 기록을 가져오는 함수
-        input_messages_key="question",  # 사용자의 질문이 템플릿 변수에 들어갈 key
-        history_messages_key="chat_history",  # 기록 메시지의 키
+        get_session_history,  # Function to get session history
+        input_messages_key="question",  # Key for user question
+        history_messages_key="chat_history",  # Key for history messages
     )
 
     return chain_with_history.with_config(configurable={"session_id": "abc1234"})
